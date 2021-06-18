@@ -46,38 +46,62 @@ import re
 __author__ = 'robmartin'
 __version__ = '0.1.0'
 
+MTU_DEFAULT = 1500
+
 class ROUTEUPDATE(eossdk.AgentHandler, eossdk.FibHandler):
     def __init__(self, fibMgr, agentMgr):
         eossdk.AgentHandler.__init__(self,agentMgr)
         eossdk.FibHandler.__init__(self,fibMgr)
         self.tracer = eossdk.Tracer("EosSdkRouteUpdate")
-        self.bfdMgr_ = fibMgr
+        self.fibMgr_ = fibMgr
         self.agentMgr_ = agentMgr
+        self.MTU = MTU_DEFAULT
         self.tracer.trace0("Constructed")
 
     def on_initialized(self):
         self.tracer.trace0("We are initialized!")
-        self.agentMgr_.status_set("Total BFD Peer/State changes","0")
-        self.watch_all_bfd_sessions(True)
-        self.to_syslog('Route Upate Agent Initialized')
+        self.agentMgr_.status_set("MTU", str(self.MTU))
+        self._to_syslog("Agent STARTED", 'Route Upate Agent Initialized')
+        # Loop through any pre existing configurations to load
+        for _option in self.agentMgr_.agent_option_iter():
+            self.on_agent_option(_option, self.agentMgr_.agent_option(_option))
     
     def on_agent_option(self,optionName, value):
         """
         Function called when Daemon Option config added.
         """
-        self.to_syslog("Option added: Key: {key}, Value: {value}".format(
+        self._to_syslog("Option ADDED", "Key: {key}, Value: {value}".format(
             key = optionName,
             value = value
         ))
+        if optionName.lower() == 'mtu':
+            if value:
+                self._to_syslog("Option UPDATED", "MTU value changed from %s to %s"%(self.MTU,value))
+                self.MTU = int(value)
+            else:
+                self._to_syslog("Option UPDATED", "MTU value changed from %s to 10"%(self.MTU))
+                self.MTU = MTU_DEFAULT
+            self.agentMgr_.status_set("MTU", str(self.MTU))
+
+    def verify_ip_addr(self, ip_string):
+        """
+        Function to check if provided IP is valid.
+        Parameters:
+        ip_string = IP Address with mask (10.10.10.10/32)
+        """
+        self._to_syslog("INFO", "Verify IP")
 
 
-    def to_syslog(self,sys_msg):
-        syslog.syslog("%%SDK-Route-Log-6-LOG: Route Update: %s"%sys_msg)
+    def _to_syslog(self, sys_type, sys_msg):
+        syslog.syslog("%%SDK-RouteUpdate-Log-6-LOG: {type}: {msg}".format(
+            type = sys_type,
+            msg = sys_msg
+        ))
     
         
 
 if __name__ == '__main__':
-    syslog.openlog('SDK-Route-Log',0,syslog.LOG_LOCAL4)
+    syslog.openlog('SDK-RouteUpdate-Log',0,syslog.LOG_LOCAL4)
     sdk = eossdk.Sdk()
     _ = ROUTEUPDATE(sdk.get_fib_mgr(),sdk.get_agent_mgr())
     sdk.main_loop(sys.argv)
