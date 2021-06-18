@@ -47,6 +47,25 @@ __author__ = 'robmartin'
 __version__ = '0.1.0'
 
 MTU_DEFAULT = 1500
+ALL_HOSTS = {}
+
+class DESTHOST():
+    def __init__(self, host_name, host_ip):
+        self.name = host_name
+        self.full_ip = host_ip
+        self.ip_addr = ''
+        self.ip_mask = ''
+        self.route_network = ''
+        self.next_hop = ''
+        self.status_msg = ""
+
+    def set_msg(self,msg):
+        self.status_msg = msg
+    
+    def del_msg(self):
+        self.status_msg = ''
+
+
 
 class ROUTEUPDATE(eossdk.AgentHandler, eossdk.FibHandler):
     def __init__(self, fibMgr, agentMgr):
@@ -82,6 +101,37 @@ class ROUTEUPDATE(eossdk.AgentHandler, eossdk.FibHandler):
                 self._to_syslog("Option UPDATED", "MTU value changed from %s to 10"%(self.MTU))
                 self.MTU = MTU_DEFAULT
             self.agentMgr_.status_set("MTU", str(self.MTU))
+        else:
+            new_host = True
+            if not value:
+                self._to_syslog("Option REMOVED", "Remove destination {dest}".format(
+                    dest = optionName
+                ))
+                self._remove_status(optionName)
+            else:
+                if ALL_HOSTS:
+                    if optionName in ALL_HOSTS:
+                        if ALL_HOSTS[optionName].ip != '':
+                            new_host = False
+                    if new_host:
+                        self._to_syslog("HOST ADDED", "{node} node added for updates".format(
+                            node = optionName
+                        ))
+                        new_host = DESTHOST(optionName, value)
+                        new_host.set_msg("First Message")
+                        ALL_HOSTS[optionName] = new_host
+                        self.agentMgr_.status_set(optionName, new_host.status_msg)
+                    else:
+                        if optionName in ALL_HOSTS:
+                            ALL_HOSTS[optionName].ip = value
+                else:
+                    new_host = DESTHOST(optionName, value)
+                    new_host.set_msg("First Message")
+                    ALL_HOSTS[optionName] = new_host
+                    self.agentMgr_.status_set(optionName, new_host.status_msg)
+
+                
+
 
     def verify_ip_addr(self, ip_string):
         """
@@ -91,6 +141,18 @@ class ROUTEUPDATE(eossdk.AgentHandler, eossdk.FibHandler):
         """
         self._to_syslog("INFO", "Verify IP")
 
+    def _remove_status(self,rem_device):
+        #Function to remove the old status and device from list
+        if ALL_HOSTS:
+            if rem_device in ALL_HOSTS:
+                _host = ALL_HOSTS[rem_device]
+                self.agentMgr_.status_del(rem_device)
+                try:
+                    ALL_HOSTS.pop(rem_device)
+                except:
+                    self._to_syslog("Option ERROR", "Option {name} not found internally, not removing".format(
+                        name = rem_device
+                    ))
 
     def _to_syslog(self, sys_type, sys_msg):
         syslog.syslog("%%SDK-RouteUpdate-Log-6-LOG: {type}: {msg}".format(
