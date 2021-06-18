@@ -84,7 +84,17 @@ class ROUTEUPDATE(eossdk.AgentHandler, eossdk.FibHandler):
         # Loop through any pre existing configurations to load
         for _option in self.agentMgr_.agent_option_iter():
             self.on_agent_option(_option, self.agentMgr_.agent_option(_option))
-    
+        for _route in self.fibMgr_.fib_route_iter():
+            if _route.route_type() == eossdk.ROUTE_TYPE_EBGP:
+                try:
+                    if _route.route_key().prefix().to_string() == '172.16.116.0/24':
+                        # FIX THIS
+                        self.fibMgr_.fib_route_set(_route.route_key())
+                    self._to_syslog("DEBUG",_route.to_string())
+                    self._to_syslog("DEBUG",_route.route_key().prefix().to_string())
+                except:
+                    self._to_syslog("DEBUG","ERROR")
+
     def on_agent_option(self,optionName, value):
         """
         Function called when Daemon Option config added.
@@ -101,45 +111,68 @@ class ROUTEUPDATE(eossdk.AgentHandler, eossdk.FibHandler):
                 self._to_syslog("Option UPDATED", "MTU value changed from %s to 10"%(self.MTU))
                 self.MTU = MTU_DEFAULT
             self.agentMgr_.status_set("MTU", str(self.MTU))
+        # Catch All for any destinations/hosts
         else:
             new_host = True
+            # Called if Host option is to be removed
             if not value:
                 self._to_syslog("Option REMOVED", "Remove destination {dest}".format(
                     dest = optionName
                 ))
                 self._remove_status(optionName)
+            #Addition/Update of host
             else:
-                if ALL_HOSTS:
-                    if optionName in ALL_HOSTS:
-                        if ALL_HOSTS[optionName].ip != '':
-                            new_host = False
+                _node_ip = self.verify_ip_addr(value)
+                if optionName in ALL_HOSTS:
+                    if ALL_HOSTS[optionName].ip != '':
+                        new_host = False
+                # Check if IP Address if valid
+                if _node_ip:
                     if new_host:
-                        self._to_syslog("HOST ADDED", "{node} node added for updates".format(
-                            node = optionName
-                        ))
-                        new_host = DESTHOST(optionName, value)
-                        new_host.set_msg("First Message")
-                        ALL_HOSTS[optionName] = new_host
-                        self.agentMgr_.status_set(optionName, new_host.status_msg)
+                            self._to_syslog("HOST ADDED", "{node} node added for updates".format(
+                                node = optionName
+                            ))
+                            new_host = DESTHOST(optionName, _node_ip)
+                            new_host.set_msg("First Message")
+                            ALL_HOSTS[optionName] = new_host
+                            self.agentMgr_.status_set(optionName, new_host.status_msg)
                     else:
                         if optionName in ALL_HOSTS:
-                            ALL_HOSTS[optionName].ip = value
+                            ALL_HOSTS[optionName].ip = _node_ip
                 else:
-                    new_host = DESTHOST(optionName, value)
-                    new_host.set_msg("First Message")
-                    ALL_HOSTS[optionName] = new_host
-                    self.agentMgr_.status_set(optionName, new_host.status_msg)
+                    self._to_syslog("HOST ERROR", "{name} node does not have a valid IPv4 Address, Provided: {ip}".format(
+                        node = optionName,
+                        ip = value
+                    ))
 
-                
+    def on_route_set(self, _fib_route_update):
+        self._to_syslog("INFO","ROUTE UPDATE")
+        self._to_syslog("INFO", _fib_route_update.to_string())
 
+    def on_route_del(self, _fib_route_update):
+        self._to_syslog("INFO","ROUTE DELETED")
+        self._to_syslog("INFO", _fib_route_update.to_string())
+
+    def on_fec_set(self, _fib_route_update):
+        self._to_syslog("INFO","FEC UPDATE")
+        self._to_syslog("INFO", _fib_route_update.to_string())
+
+    def on_fec_del(self, _fib_route_update):
+        self._to_syslog("INFO","FEC DELETED")
+        self._to_syslog("INFO", _fib_route_update.to_string())
 
     def verify_ip_addr(self, ip_string):
         """
         Function to check if provided IP is valid.
         Parameters:
-        ip_string = IP Address with mask (10.10.10.10/32)
+        ip_string = IP Address (10.10.10.10)
         """
-        self._to_syslog("INFO", "Verify IP")
+        self._to_syslog("INFO", "Verifying")
+        try:
+            _ip_addr = eossdk.IpAddr(ip_string)
+            return(_ip_addr)
+        except:
+            return(False)
 
     def _remove_status(self,rem_device):
         #Function to remove the old status and device from list
