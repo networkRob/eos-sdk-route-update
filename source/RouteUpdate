@@ -87,9 +87,6 @@ class ROUTEUPDATE(eossdk.AgentHandler, eossdk.FibHandler):
         for _route in self.fibMgr_.fib_route_iter():
             if _route.route_type() == eossdk.ROUTE_TYPE_EBGP:
                 try:
-                    if _route.route_key().prefix().to_string() == '172.16.116.0/24':
-                        # FIX THIS
-                        self.fibMgr_.fib_route_set(_route.route_key())
                     self._to_syslog("DEBUG",_route.to_string())
                     self._to_syslog("DEBUG",_route.route_key().prefix().to_string())
                 except:
@@ -146,19 +143,27 @@ class ROUTEUPDATE(eossdk.AgentHandler, eossdk.FibHandler):
                     ))
 
     def on_route_set(self, _fib_route_update):
-        self._to_syslog("INFO","ROUTE UPDATE")
-        self._to_syslog("INFO", _fib_route_update.to_string())
+        self._to_syslog("INFO","ROUTE UPDATE Received for {route}".format(
+            route = _fib_route_update.route_key().prefix().to_string()
+        ))
+        _fec_id = _fib_route_update.fec_id()
+        _tmp_fec = self.fibMgr_.fib_fec(eossdk.FibFecKey(_fec_id))
+        _route_via = _tmp_fec.via()
+        if len(_route_via) > 0:
+            self._to_syslog("INFO", "Route to {dest} via {hop}".format(
+                dest = _fib_route_update.route_key().prefix().to_string(),
+                hop = _route_via[0].hop().to_string()
+            ))
+            # =========================================================
+            # TODO Perform bash lookups for kernel static routes and 
+            # add or remove the old routes 
+            # =========================================================
+            
+
+
 
     def on_route_del(self, _fib_route_update):
         self._to_syslog("INFO","ROUTE DELETED")
-        self._to_syslog("INFO", _fib_route_update.to_string())
-
-    def on_fec_set(self, _fib_route_update):
-        self._to_syslog("INFO","FEC UPDATE")
-        self._to_syslog("INFO", _fib_route_update.to_string())
-
-    def on_fec_del(self, _fib_route_update):
-        self._to_syslog("INFO","FEC DELETED")
         self._to_syslog("INFO", _fib_route_update.to_string())
 
     def verify_ip_addr(self, ip_string):
@@ -198,5 +203,5 @@ class ROUTEUPDATE(eossdk.AgentHandler, eossdk.FibHandler):
 if __name__ == '__main__':
     syslog.openlog('SDK-RouteUpdate-Log',0,syslog.LOG_LOCAL4)
     sdk = eossdk.Sdk()
-    _ = ROUTEUPDATE(sdk.get_fib_mgr(),sdk.get_agent_mgr())
+    _ = ROUTEUPDATE(sdk.get_fib_mgr(eossdk.MODE_TYPE_READ_NOTIFYING),sdk.get_agent_mgr())
     sdk.main_loop(sys.argv)
