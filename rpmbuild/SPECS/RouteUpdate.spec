@@ -6,13 +6,13 @@ License: Arista Networks
 Group: EOS/Extension
 Source0: %{name}-%{version}-%{release}.tar
 BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}.tar
-BuildArch: i386
+BuildArch: noarch
 
 %description
 This EOS SDK script will monitor IP Routes and update Linux Kernel Routes.
 
 %prep
-%setup -q -n RouteUpdate
+%setup -q -n source
 
 %build
 
