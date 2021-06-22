@@ -1,6 +1,6 @@
 Summary: RouteUpdate
 Name: RouteUpdate
-Version: 0.1.0
+Version: 0.3.0
 Release: 1
 License: Arista Networks
 Group: EOS/Extension

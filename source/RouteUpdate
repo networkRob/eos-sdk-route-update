@@ -108,6 +108,19 @@ class ROUTEUPDATE(eossdk.AgentHandler, eossdk.FibHandler):
                 self._to_syslog("Option UPDATED", "MTU value changed from %s to 10"%(self.MTU))
                 self.MTU = MTU_DEFAULT
             self.agentMgr_.status_set("MTU", str(self.MTU))
+            # Loop through all Hosts and update the MTU
+            if ALL_HOSTS:
+                for _host in ALL_HOSTS:
+                    _dest_host = ALL_HOSTS[_host]
+                    self._to_syslog("INFO", "Updating route for {host} with new MTU of {mtu}".format(
+                        host = str(_dest_host.full_ip),
+                        mtu = self.MTU
+                    ))
+                    # Remove old kernel static route
+                    self.remove_kernel_route(str(_dest_host.full_ip), _dest_host.next_hop)
+                    # Add updated kernel static route
+                    self.add_kernel_route(str(_dest_host.full_ip), _dest_host.next_hop)
+                self._to_syslog("OK", "Updated all configured destination host kernel static routes with new MTU")
         # Catch All for any destinations/hosts
         else:
             new_host = True
@@ -167,15 +180,16 @@ class ROUTEUPDATE(eossdk.AgentHandler, eossdk.FibHandler):
         _dest_ip = IP Address for the host (IP Addr_object)
         """
         for _route in self.fibMgr_.fib_route_iter():
-            _tmp_prefix = ipaddress.ip_network(u"{network}".format(
-                network = _route.route_key().prefix().to_string()
-            ))
-            if _dest_ip in _tmp_prefix:
-                self._to_syslog("OK", "Host {host} is in {route}".format(
-                    host = str(_dest_ip),
-                    route  = _route.route_key().prefix().to_string()
+            if _route.route_type() != eossdk.ROUTE_TYPE_KERNEL:
+                _tmp_prefix = ipaddress.ip_network(u"{network}".format(
+                    network = _route.route_key().prefix().to_string()
                 ))
-                return(_route)
+                if _dest_ip in _tmp_prefix:
+                    self._to_syslog("OK", "Host {host} is in {route}".format(
+                        host = str(_dest_ip),
+                        route  = _route.route_key().prefix().to_string()
+                    ))
+                    return(_route)
         else:
             return(False)
     
@@ -192,39 +206,40 @@ class ROUTEUPDATE(eossdk.AgentHandler, eossdk.FibHandler):
         
 
     def on_route_set(self, _fib_route_update):
-        _route = _fib_route_update.route_key()
-        _route_prefix = ipaddress.ip_network(u"{network}".format(
-            network = _route.prefix().to_string()
-        ))
-        for _host in ALL_HOSTS:
-            _dest_host = ALL_HOSTS[_host]
-            if _dest_host.full_ip in _route_prefix:
-                # Grab information about the route for next-hop
-                _fec_id = _fib_route_update.fec_id()
-                _tmp_fec = self.fibMgr_.fib_fec(eossdk.FibFecKey(_fec_id))
-                _route_via = _tmp_fec.via()
-                if len(_route_via) > 0:
-                    _str_route_via = _route_via[0].hop().to_string()
-                    if _dest_host.next_hop != _str_route_via:
-                        self._to_syslog("INFO", "Updated {host} host to {hop} next-hop".format(
-                            host = str(_dest_host.full_ip),
+        if _fib_route_update.route_type() != eossdk.ROUTE_TYPE_KERNEL:
+            _route = _fib_route_update.route_key()
+            _route_prefix = ipaddress.ip_network(u"{network}".format(
+                network = _route.prefix().to_string()
+            ))
+            for _host in ALL_HOSTS:
+                _dest_host = ALL_HOSTS[_host]
+                if _dest_host.full_ip in _route_prefix:
+                    # Grab information about the route for next-hop
+                    _fec_id = _fib_route_update.fec_id()
+                    _tmp_fec = self.fibMgr_.fib_fec(eossdk.FibFecKey(_fec_id))
+                    _route_via = _tmp_fec.via()
+                    if len(_route_via) > 0:
+                        _str_route_via = _route_via[0].hop().to_string()
+                        if _dest_host.next_hop != _str_route_via:
+                            self._to_syslog("INFO", "Updated {host} host to {hop} next-hop".format(
+                                host = str(_dest_host.full_ip),
+                                hop = _str_route_via
+                            ))
+                            # Remove old static Route
+                            self.remove_kernel_route(str(_dest_host.full_ip), _dest_host.next_hop)
+                            # Prepare for updated static route
+                            _dest_host.set_next_hop(_str_route_via)
+                            _dest_host.set_msg("{network} network via {hop} next-hop".format(
+                                network = _dest_host.route_network,
+                                hop = _str_route_via
+                            ))
+                            self.agentMgr_.status_set(_host, _dest_host.status_msg)
+                            ALL_HOSTS[_host] = _dest_host
+                            self.add_kernel_route(str(_dest_host.full_ip), _str_route_via)
+                        self._to_syslog("INFO", "Route to {dest} via {hop}".format(
+                            dest = _fib_route_update.route_key().prefix().to_string(),
                             hop = _str_route_via
                         ))
-                        # Remove old static Route
-                        self.remove_kernel_route(str(_dest_host.full_ip), _dest_host.next_hop)
-                        # Prepare for updated static route
-                        _dest_host.set_next_hop(_str_route_via)
-                        _dest_host.set_msg("{network} network via {hop} next-hop".format(
-                            network = _dest_host.route_network,
-                            hop = _str_route_via
-                        ))
-                        self.agentMgr_.status_set(_host, _dest_host.status_msg)
-                        ALL_HOSTS[_host] = _dest_host
-                        self.add_kernel_route(str(_dest_host.full_ip), _str_route_via)
-                    self._to_syslog("INFO", "Route to {dest} via {hop}".format(
-                        dest = _fib_route_update.route_key().prefix().to_string(),
-                        hop = _str_route_via
-                    ))
 
 
     def verify_ip_addr(self, ip_string):
