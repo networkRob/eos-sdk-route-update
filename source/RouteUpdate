@@ -43,6 +43,7 @@ import syslog
 import sys
 import time
 import re
+from subprocess import call, PIPE
 
 __author__ = 'robmartin'
 __version__ = '0.1.0'
@@ -115,7 +116,7 @@ class ROUTEUPDATE(eossdk.AgentHandler, eossdk.FibHandler):
                 self._to_syslog("Option REMOVED", "Remove destination {dest}".format(
                     dest = optionName
                 ))
-                self._remove_status(optionName)
+                self._remove_host(optionName)
             #Addition/Update of host
             else:
                 _node_ip = self.verify_ip_addr(value)
@@ -151,6 +152,7 @@ class ROUTEUPDATE(eossdk.AgentHandler, eossdk.FibHandler):
                             hop = _str_next_hop
                         ))
                         self.agentMgr_.status_set(optionName, new_host.status_msg)
+                        self.add_kernel_route(str(_node_ip), _str_next_hop)
                 else:
                     self._to_syslog("HOST ERROR", "{node} node does not have a valid IPv4 Address, Provided: {ip}".format(
                         node = optionName,
@@ -191,9 +193,6 @@ class ROUTEUPDATE(eossdk.AgentHandler, eossdk.FibHandler):
 
     def on_route_set(self, _fib_route_update):
         _route = _fib_route_update.route_key()
-        self._to_syslog("INFO","ROUTE UPDATE Received for {route}".format(
-            route = _route.prefix().to_string()
-        ))
         _route_prefix = ipaddress.ip_network(u"{network}".format(
             network = _route.prefix().to_string()
         ))
@@ -211,6 +210,9 @@ class ROUTEUPDATE(eossdk.AgentHandler, eossdk.FibHandler):
                             host = str(_dest_host.full_ip),
                             hop = _str_route_via
                         ))
+                        # Remove old static Route
+                        self.remove_kernel_route(str(_dest_host.full_ip), _dest_host.next_hop)
+                        # Prepare for updated static route
                         _dest_host.set_next_hop(_str_route_via)
                         _dest_host.set_msg("{network} network via {hop} next-hop".format(
                             network = _dest_host.route_network,
@@ -218,17 +220,12 @@ class ROUTEUPDATE(eossdk.AgentHandler, eossdk.FibHandler):
                         ))
                         self.agentMgr_.status_set(_host, _dest_host.status_msg)
                         ALL_HOSTS[_host] = _dest_host
+                        self.add_kernel_route(str(_dest_host.full_ip), _str_route_via)
                     self._to_syslog("INFO", "Route to {dest} via {hop}".format(
                         dest = _fib_route_update.route_key().prefix().to_string(),
-                        hop = _route_via[0].hop().to_string()
+                        hop = _str_route_via
                     ))
 
-
-
-
-    def on_route_del(self, _fib_route_update):
-        self._to_syslog("INFO","ROUTE DELETED")
-        self._to_syslog("INFO", _fib_route_update.to_string())
 
     def verify_ip_addr(self, ip_string):
         """
@@ -245,12 +242,76 @@ class ROUTEUPDATE(eossdk.AgentHandler, eossdk.FibHandler):
         except:
             return(False)
 
-    def _remove_status(self,rem_device):
+    def add_kernel_route(self, _host_ip, _host_via):
+        """
+        Function to remove a static route programmed into the kernel
+        Parameters:
+        _host_ip = IP Address for the destination (string)
+        _host_via = IP Route Next Hop (string)
+        """
+        add_route = [
+            "ip",
+            "route",
+            "add",
+            "{host}/32".format(host=_host_ip),
+            "via",
+            _host_via,
+            "mtu",
+            str(self.MTU)
+        ]
+        try:
+            kernel_route_add = call(add_route, stdout=PIPE, stderr=PIPE)
+            self._to_syslog("OK", "Added Kernel route for {host} via {hop} with MTU {mtu}".format(
+                host = _host_ip,
+                hop = _host_via,
+                mtu = self.MTU
+            ))
+        except:
+            kernel_route_add = 6
+            self._to_syslog("ERROR", "Issue adding Kernel route for {host} via {hop} with MTU {mtu}".format(
+                host = _host_ip,
+                hop = _host_via,
+                mtu = self.MTU
+            ))
+        return(kernel_route_add)
+
+    def remove_kernel_route(self, _host_ip, _host_via):
+        """
+        Function to remove a static route programmed into the kernel
+        Parameters:
+        _host_ip = IP Address for the destination (string)
+        _host_via = IP Route Next Hop (string)
+        """
+        del_route = [
+            "ip",
+            "route",
+            "delete",
+            "{host}/32".format(host=_host_ip),
+            "via",
+            _host_via
+        ]
+        try:
+            kernel_route_delete = call(del_route, stdout=PIPE, stderr=PIPE)
+            self._to_syslog("OK", "Removed Kernel route for {host} via {hop}".format(
+                host = _host_ip,
+                hop = _host_via
+            ))
+        except:
+            kernel_route_delete = 6
+            self._to_syslog("ERROR", "Issue removing Kernel route for {host} via {hop}".format(
+                host = _host_ip,
+                hop = _host_via
+            ))
+        return(kernel_route_delete)
+
+    def _remove_host(self,rem_device):
         #Function to remove the old status and device from list
         if ALL_HOSTS:
             if rem_device in ALL_HOSTS:
                 _host = ALL_HOSTS[rem_device]
                 self.agentMgr_.status_del(rem_device)
+                # Remove any static route for host
+                self.remove_kernel_route(str(_host.full_ip), str(_host.next_hop))
                 try:
                     ALL_HOSTS.pop(rem_device)
                 except:
