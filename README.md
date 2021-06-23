@@ -68,7 +68,7 @@ option {device_name} value {ip_of_device}
 ```
 **`device_name` needs to be a unique identifier for each remote switch/device*
 
-**`ip_of_device` needs to be a valid IPv4 address for the remote device for monitoring*
+**`ip_of_device` needs to be a valid IPv4 address for the destination address for the static kernel route to be created*
 
 ***To see what unique peer identifiers have been created, enter `show daemon RouteUpdate`*
 
