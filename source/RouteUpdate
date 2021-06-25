@@ -46,7 +46,7 @@ import re
 from subprocess import call, PIPE
 
 __author__ = 'robmartin'
-__version__ = '0.1.0'
+__version__ = '0.4.0'
 
 MTU_DEFAULT = 1500
 ALL_HOSTS = {}
@@ -102,8 +102,16 @@ class ROUTEUPDATE(eossdk.AgentHandler, eossdk.FibHandler):
         ))
         if optionName.lower() == 'mtu':
             if value:
-                self._to_syslog("Option UPDATED", "MTU value changed from %s to %s"%(self.MTU,value))
-                self.MTU = int(value)
+                # Perform check on MTU value
+                try:
+                    _mtu = int(value)
+                    if _mtu >= 68 and _mtu <= 65535:
+                        self._to_syslog("Option UPDATED", "MTU value changed from %s to %s"%(self.MTU,value))
+                        self.MTU = _mtu
+                    else:
+                        self._to_syslog("Option Error", "MTU value needs to be between 68-65535 bytes.")
+                except:
+                    self._to_syslog("Option Error", "Entered MTU value is not an integer. Should be between 68-65535.")
             else:
                 self._to_syslog("Option UPDATED", "MTU value changed from %s to 10"%(self.MTU))
                 self.MTU = MTU_DEFAULT
