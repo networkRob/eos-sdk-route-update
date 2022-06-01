@@ -160,7 +160,7 @@ class ROUTEUPDATE(eossdk.AgentHandler, eossdk.FibHandler):
                     route_prefix = self.find_route_prefix(_node_ip)
                     if route_prefix:
                         _route_via = self.get_route_via(route_prefix)
-                        _str_next_hop = _route_via.hop().to_string()
+                        _str_next_hop = _route_via
                         _str_route_prefix = route_prefix.route_key().prefix().to_string()
                         self._to_syslog("INFO", "Found {route} route via destination {via}".format(
                             route = _str_route_prefix,
@@ -210,7 +210,8 @@ class ROUTEUPDATE(eossdk.AgentHandler, eossdk.FibHandler):
         _fec_id = _ip_route.fec_id()
         _tmp_fec = self.fibMgr_.fib_fec(eossdk.FibFecKey(_fec_id))
         _route_via = _tmp_fec.via()
-        return(_route_via[0])
+        _route_next_hop = _route_via[0].hop().to_string()
+        return(_route_next_hop)
         
 
     def on_route_set(self, _fib_route_update):

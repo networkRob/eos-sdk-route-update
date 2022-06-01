@@ -11,7 +11,7 @@ done
 
 APP=$name
 PROJECT='eos-sdk-route-update'
-DUT='192.168.20.1'
+DUT='192.168.50.4'
 echo "Creating RPM Directories"
 mkdir -p rpmbuild/SOURCES
 mkdir -p rpmbuild/RPM
