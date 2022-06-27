@@ -1,0 +1,96 @@
+image: rhub.networkrob.com/ceosimage:4.28.0F
+stages:
+  - rpm
+  - swix 
+  - upload
+  - release
+
+build-rpm:
+  image: rhub.networkrob.com/fedorarpm:36.1
+  stage: rpm
+  only:
+    - /v[0-9|\.]+/ # release tags
+  except:
+    - branches
+  variables:
+    APP: "RouteUpdate"
+  artifacts:
+    paths:
+      - rpmbuild/RPM/noarch
+    reports:
+      dotenv: generate_executables.env
+  before_script:
+    - RPM_VERSION=$(echo $CI_COMMIT_TAG | sed 's/v//g')
+    - echo "RPM_VERSION=$RPM_VERSION" >> generate_executables.env
+    - echo "APP=$APP" >> generate_executables.env
+    - cp ci-rpmmacros ~/.rpmmacros
+    - mkdir -p rpmbuild/SOURCES
+    - mkdir -p rpmbuild/RPM
+  script:
+    - tar -cvf rpmbuild/SOURCES/${APP}-${RPM_VERSION}-1.tar source/*
+    - rpmbuild --define "_project_dir $CI_PROJECT_DIR" --define "_app $APP" --define "_version $RPM_VERSION" -ba rpmbuild/SPECS/${APP}.spec
+    - ls -alh rpmbuild/RPM/noarch
+
+build-swix:
+  stage: swix
+  only:
+    - /v[0-9|\.]+/ # release tags
+  except:
+    - branches
+  needs:
+    - job: build-rpm
+      artifacts: true
+  artifacts:
+    paths:
+      - extension
+    reports:
+      dotenv: generate_executables.env
+  before_script:
+    - echo GE_JOB_ID=$CI_JOB_ID >> generate_executables.env
+    - mkdir -p /mnt/flash/ext/swix
+    - mkdir -p extension
+    - cp rpmbuild/RPM/noarch/${APP}-${RPM_VERSION}-1.noarch.rpm /mnt/flash/ext/.
+    - cd /mnt/flash/ext
+  script:
+    - 'echo "format: 1" >> manifest.txt'
+    - 'echo "primaryRPM: ${APP}-${RPM_VERSION}-1.noarch.rpm" >> manifest.txt'
+    - ls -lah
+    - cat manifest.txt
+    - SHA=$(sha1sum ${APP}-${RPM_VERSION}-1.noarch.rpm | awk '{print $1}')
+    - 'echo "${APP}-${RPM_VERSION}-1.noarch.rpm: ${SHA}" >> manifest.txt'
+    - swix create swix/${APP}-${RPM_VERSION}-1.swix ${APP}-${RPM_VERSION}-1.noarch.rpm
+    - cd ${CI_PROJECT_DIR}
+    - cp /mnt/flash/ext/swix/${APP}-${RPM_VERSION}-1.swix extension/.
+    - ls -lah extension
+
+upload:
+  stage: upload
+  image: curlimages/curl:latest
+  only:
+    - /v[0-9|\.]+/ # release tags
+  except:
+    - branches
+  needs:
+    - job: build-rpm
+      artifacts: true
+    - job: build-swix
+      artifacts: true
+  script:
+    - 'curl --header "JOB-TOKEN: $CI_JOB_TOKEN" --upload-file extension/${APP}-${RPM_VERSION}-1.swix "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/${APP}/${RPM_VERSION}/${APP}-${RPM_VERSION}-1.swix"'
+
+release:
+  stage: release
+  image: registry.gitlab.com/gitlab-org/release-cli:latest
+  only:
+    - /v[0-9|\.]+/ # release tags
+  except:
+    - branches
+  needs:
+    - job: build-rpm
+      artifacts: true
+    - job: build-swix
+      artifacts: true
+  script:
+    - |
+      release-cli create --name "Release $CI_COMMIT_TAG" --tag-name $CI_COMMIT_TAG \
+        --assets-link "{\"name\":\"${APP}-${RPM_VERSION}-1.swix\",\"url\":\"${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/${APP}/${RPM_VERSION}/${APP}-${RPM_VERSION}-1.swix\"}" 
