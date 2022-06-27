@@ -1,4 +1,6 @@
 # EOS SDK Route Update
+[![Latest Release](https://mgit.networkrob.com/networkRob/eos-sdk-route-update/-/badges/release.svg)](https://mgit.networkrob.com/networkRob/eos-sdk-route-update/-/releases)
+[![pipeline status](https://mgit.networkrob.com/networkRob/eos-sdk-route-update/badges/master/pipeline.svg)](https://mgit.networkrob.com/networkRob/eos-sdk-route-update/-/commits/master)
 
 This EOS SDK Agent is used to add a kernel static route for specified destination hosts with a specific MTU value. When a route update occurs on the switch for any of the routes, this agent will evaluate the route for the configured destinations and update any kernel static routes.
 

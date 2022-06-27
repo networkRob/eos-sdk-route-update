@@ -1,6 +1,6 @@
-Summary: RouteUpdate
-Name: RouteUpdate
-Version: 0.5.1
+Summary: %_app
+Name: %_app
+Version: %_version
 Release: 1
 License: Arista Networks
 Group: EOS/Extension
@@ -18,9 +18,9 @@ This EOS SDK script will monitor IP Routes and update Linux Kernel Routes.
 
 %install
 mkdir -p $RPM_BUILD_ROOT/usr/bin
-cp RouteUpdate $RPM_BUILD_ROOT/usr/bin/
+cp %_app $RPM_BUILD_ROOT/usr/bin/
 
 %files
 %defattr(-,root,root,-)
-/usr/bin/RouteUpdate
-%attr(0755,root,root) /usr/bin/RouteUpdate
+/usr/bin/%_app
+%attr(0755,root,root) /usr/bin/%_app
