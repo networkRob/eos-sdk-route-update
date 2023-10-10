@@ -97,6 +97,7 @@ class ROUTEUPDATE(eossdk.AgentHandler, eossdk.FibHandler):
         for _option in self.agentMgr_.agent_option_iter():
             self.on_agent_option(_option, self.agentMgr_.agent_option(_option))
 
+
     def on_agent_option(self,optionName, value):
         """
         Function called when Daemon Option config added.
@@ -227,6 +228,7 @@ class ROUTEUPDATE(eossdk.AgentHandler, eossdk.FibHandler):
             if _dest_host.route_network == _route_prefix:
                 _dest_host.clear()
                 self._to_syslog("DEBUG", "Clearing of Host Route Data")
+                self.agentMgr_.status_set(_host, _dest_host.status_msg)
 
 
 
@@ -255,6 +257,10 @@ class ROUTEUPDATE(eossdk.AgentHandler, eossdk.FibHandler):
                             ))
                             # Remove old static Route
                             self.remove_kernel_route(str(_dest_host.full_ip), _dest_host.next_hop)
+
+                            # Update host information for new Route Updates
+                            _dest_host.set_prefix(_route.prefix().to_string())
+
                             # Prepare for updated static route
                             _dest_host.set_next_hop(_str_route_via)
                             _dest_host.set_msg("{network} network via {hop} next-hop".format(
