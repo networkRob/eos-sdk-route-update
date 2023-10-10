@@ -72,6 +72,11 @@ class DESTHOST():
     def del_msg(self):
         self.status_msg = ''
 
+    def clear(self):
+        self.next_hop = ''
+        self.route_network = ''
+        self.status_msg = 'route cleared'
+
 
 
 class ROUTEUPDATE(eossdk.AgentHandler, eossdk.FibHandler):
@@ -213,9 +218,21 @@ class ROUTEUPDATE(eossdk.AgentHandler, eossdk.FibHandler):
         _route_next_hop = _route_via[0].hop().to_string()
         return(_route_next_hop)
         
+    def on_route_del(self, _fib_route_update):
+        _route_prefix = _fib_route_update.prefix()
+        self._to_syslog("DEBUG", "Delete Route Prefix {}".format(_route_prefix))
+        self._to_syslog("DEBUG", "Route Delete Called {}".format(_fib_route_update.to_string()))
+        for _host in ALL_HOSTS:
+            _dest_host = ALL_HOSTS[_host]
+            if _dest_host.route_network == _route_prefix:
+                _dest_host.clear()
+                self._to_syslog("DEBUG", "Clearing of Host Route Data")
+
+
 
     def on_route_set(self, _fib_route_update):
         if _fib_route_update.route_type() != eossdk.ROUTE_TYPE_KERNEL:
+            self._to_syslog("DEBUG", "Route Type: {0}".format(_fib_route_update.to_string()))
             _route = _fib_route_update.route_key()
             _route_prefix = ipaddress.ip_network(u"{network}".format(
                 network = _route.prefix().to_string()
@@ -228,8 +245,10 @@ class ROUTEUPDATE(eossdk.AgentHandler, eossdk.FibHandler):
                     _tmp_fec = self.fibMgr_.fib_fec(eossdk.FibFecKey(_fec_id))
                     _route_via = _tmp_fec.via()
                     if len(_route_via) > 0:
+                        self._to_syslog("DEBUG", "Host information: {0}".format(_host))
+                        self._to_syslog("DEBUG", "Next Hop in Route Update: {0}".format(_route_via[0].hop().to_string()))
                         _str_route_via = _route_via[0].hop().to_string()
-                        if _dest_host.next_hop != _str_route_via:
+                        if _dest_host.next_hop != _str_route_via or _dest_host.next_hop == "":
                             self._to_syslog("INFO", "Updated {host} host to {hop} next-hop".format(
                                 host = str(_dest_host.full_ip),
                                 hop = _str_route_via
