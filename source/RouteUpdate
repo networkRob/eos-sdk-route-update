@@ -97,6 +97,19 @@ class ROUTEUPDATE(eossdk.AgentHandler, eossdk.FibHandler):
         for _option in self.agentMgr_.agent_option_iter():
             self.on_agent_option(_option, self.agentMgr_.agent_option(_option))
 
+    def on_agent_enabled(self, _enabled):
+        if not _enabled:
+            self._to_syslog("DEBUG", "Agent is shutting down")
+            self.agentMgr_.status_del("MTU")
+            for _host in ALL_HOSTS:
+                self._to_syslog("DEBUG", "Removing HOST {}".format(_host))
+                _dest_host = ALL_HOSTS[_host]
+                self.agentMgr_.status_del(_host)
+                self.remove_kernel_route(str(_dest_host.full_ip), str(_dest_host.next_hop))
+                self._to_syslog("DEBUG", "Removed HOST {}".format(_host))
+            self._to_syslog("DEBUG", "Removed Hosts. Shutdown Completing")
+            self.agentMgr_.agent_shutdown_complete_is(True)
+
 
     def on_agent_option(self,optionName, value):
         """
@@ -221,20 +234,17 @@ class ROUTEUPDATE(eossdk.AgentHandler, eossdk.FibHandler):
         
     def on_route_del(self, _fib_route_update):
         _route_prefix = _fib_route_update.prefix().to_string()
-        self._to_syslog("DEBUG", "Delete Route Prefix {}".format(_route_prefix))
-        self._to_syslog("DEBUG", "Route Delete Called {}".format(_fib_route_update.to_string()))
         for _host in ALL_HOSTS:
             _dest_host = ALL_HOSTS[_host]
             if _dest_host.route_network == _route_prefix:
                 _dest_host.clear()
-                self._to_syslog("DEBUG", "Clearing of Host Route Data")
+                self._to_syslog("DEBUG", "Clearing of {0} Host Route Data for prefix {1}".format(_host, _route_prefix))
                 self.agentMgr_.status_set(_host, _dest_host.status_msg)
 
 
 
     def on_route_set(self, _fib_route_update):
         if _fib_route_update.route_type() != eossdk.ROUTE_TYPE_KERNEL:
-            self._to_syslog("DEBUG", "Route Type: {0}".format(_fib_route_update.to_string()))
             _route = _fib_route_update.route_key()
             _route_prefix = ipaddress.ip_network(u"{network}".format(
                 network = _route.prefix().to_string()
