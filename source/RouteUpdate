@@ -219,7 +219,7 @@ class ROUTEUPDATE(eossdk.AgentHandler, eossdk.FibHandler):
         return(_route_next_hop)
         
     def on_route_del(self, _fib_route_update):
-        _route_prefix = _fib_route_update.prefix()
+        _route_prefix = _fib_route_update.prefix().to_string()
         self._to_syslog("DEBUG", "Delete Route Prefix {}".format(_route_prefix))
         self._to_syslog("DEBUG", "Route Delete Called {}".format(_fib_route_update.to_string()))
         for _host in ALL_HOSTS:
