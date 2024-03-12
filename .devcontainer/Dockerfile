@@ -1,4 +1,4 @@
-FROM python:2.7
+FROM python:3.9.17
 
 RUN apt update && apt install -y \
     rpm \
